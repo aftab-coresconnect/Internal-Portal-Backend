@@ -88,4 +88,21 @@ const authorize = (roles: string[] = []): ((req: Request, res: Response, next: N
   };
 };
 
-export { protect, authorize }; 
+/**
+ * Middleware to check if user is admin
+ */
+const admin = (req: Request, res: Response, next: NextFunction): void => {
+  if (!req.user) {
+    res.status(401).json({ message: 'Not authorized, no user' });
+    return;
+  }
+
+  if (req.user.role !== 'admin') {
+    res.status(403).json({ message: 'Forbidden: Admin access required' });
+    return;
+  }
+
+  next();
+};
+
+export { protect, authorize, admin }; 

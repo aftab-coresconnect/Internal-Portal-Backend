@@ -1,6 +1,6 @@
 import express from 'express';
-import { registerUser, loginUser, getUserProfile } from '../controllers/authController';
-import { protect } from '../middleware/authMiddleware';
+import { registerUser, loginUser, getUserProfile, getUsers } from '../controllers/authController';
+import { protect, admin } from '../middleware/authMiddleware';
 
 const router = express.Router();
 
@@ -10,5 +10,8 @@ router.post('/login', loginUser);
 
 // Protected routes
 router.get('/profile', protect, getUserProfile);
+
+// Admin routes
+router.get('/users', protect, admin, getUsers);
 
 export default router; 
