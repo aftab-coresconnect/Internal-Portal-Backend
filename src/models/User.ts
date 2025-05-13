@@ -1,6 +1,5 @@
 import mongoose, { Document, Schema, Model } from 'mongoose';
-// Using require for bcrypt since TypeScript declaration file is causing issues
-const bcrypt = require('bcrypt');
+import bcrypt from 'bcryptjs';
 
 // Skill interface
 interface ISkill {
@@ -10,8 +9,7 @@ interface ISkill {
 
 // User interface
 export interface IUser extends Document {
-  firstName: string;
-  lastName: string;
+  name: string;
   email: string;
   password: string;
   role: 'admin' | 'developer' | 'teamLead' | 'client';
@@ -23,21 +21,15 @@ export interface IUser extends Document {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
-  fullName: string;
   matchPassword(enteredPassword: string): Promise<boolean>;
 }
 
 // Create schema
 const userSchema = new Schema<IUser>(
   {
-    firstName: {
+    name: {
       type: String,
-      required: [true, 'First name is required'],
-      trim: true,
-    },
-    lastName: {
-      type: String,
-      required: [true, 'Last name is required'],
+      required: [true, 'Name is required'],
       trim: true,
     },
     email: {
@@ -115,11 +107,6 @@ userSchema.pre('save', async function (next) {
 userSchema.methods.matchPassword = async function (enteredPassword: string): Promise<boolean> {
   return await bcrypt.compare(enteredPassword, this.password);
 };
-
-// Virtual for full name
-userSchema.virtual('fullName').get(function (this: IUser): string {
-  return `${this.firstName} ${this.lastName}`;
-});
 
 const User: Model<IUser> = mongoose.model<IUser>('User', userSchema);
 

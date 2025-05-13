@@ -1,28 +1,30 @@
 import { Request, Response } from 'express';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import User, { IUser } from '../models/User';
-import generateToken from '../utils/generateToken';
 
-interface RegisterUserRequest {
-  firstName: string;
-  lastName: string;
-  email: string;
-  password: string;
-  role?: string;
-}
-
-interface LoginUserRequest {
-  email: string;
-  password: string;
-}
+// JWT token generator
+const generateToken = (id: string): string => {
+  const secret = process.env.JWT_SECRET || 'fallback_jwt_secret_not_for_production';
+  return jwt.sign({ id }, secret, {
+    expiresIn: '30d',
+  });
+};
 
 /**
- * Register a new user
- * @route POST /api/auth/register
- * @access Public
+ * @desc    Register a new user
+ * @route   POST /api/auth/register
+ * @access  Public
  */
-const registerUser = async (req: Request, res: Response): Promise<void> => {
+export const registerUser = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { firstName, lastName, email, password, role }: RegisterUserRequest = req.body;
+    const { name, email, password, role } = req.body;
+
+    // Validate required fields
+    if (!name || !email || !password) {
+      res.status(400).json({ message: 'Please provide all required fields' });
+      return;
+    }
 
     // Check if user already exists
     const userExists = await User.findOne({ email });
@@ -31,93 +33,111 @@ const registerUser = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Create new user
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Create user
     const user = await User.create({
-      firstName,
-      lastName,
+      name,
       email,
-      password,
-      role: role || 'developer', // Default to 'developer' if role is not provided
+      password: hashedPassword,
+      role: role || 'developer', // Default role
     });
 
     if (user) {
-      // Generate token
-      const token = generateToken(user._id.toString());
-
+      // Convert the user document to a plain object for the response
+      const userObj = user.toObject();
+      
       res.status(201).json({
-        _id: user._id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        role: user.role,
-        token,
+        _id: userObj._id,
+        name: userObj.name,
+        email: userObj.email,
+        role: userObj.role,
+        token: generateToken(userObj._id.toString()),
       });
     } else {
       res.status(400).json({ message: 'Invalid user data' });
     }
   } catch (error) {
-    console.error(error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({ message: 'Server Error', error: errorMessage });
+    console.error('Error in registerUser:', error);
+    res.status(500).json({ message: 'Server error', error });
   }
 };
 
 /**
- * Authenticate user and get token
- * @route POST /api/auth/login
- * @access Public
+ * @desc    Login user
+ * @route   POST /api/auth/login
+ * @access  Public
  */
-const loginUser = async (req: Request, res: Response): Promise<void> => {
+export const loginUser = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { email, password }: LoginUserRequest = req.body;
+    const { email, password } = req.body;
 
-    // Find user by email
+    // Check if user exists
     const user = await User.findOne({ email });
-
-    // Check if user exists and password is correct
-    if (user && (await user.matchPassword(password))) {
-      res.json({
-        _id: user._id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        role: user.role,
-        token: generateToken(user._id.toString()),
-      });
-    } else {
-      res.status(401).json({ message: 'Invalid email or password' });
-    }
-  } catch (error) {
-    console.error(error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({ message: 'Server Error', error: errorMessage });
-  }
-};
-
-/**
- * Get user profile
- * @route GET /api/auth/profile
- * @access Private
- */
-const getUserProfile = async (req: Request, res: Response): Promise<void> => {
-  try {
-    if (!req.user) {
-      res.status(401).json({ message: 'Not authorized, no user' });
+    if (!user) {
+      res.status(401).json({ message: 'Invalid credentials' });
       return;
     }
 
-    const user = await User.findById(req.user._id).select('-password');
-    
-    if (user) {
-      res.json(user);
-    } else {
-      res.status(404).json({ message: 'User not found' });
+    // Compare passwords
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      res.status(401).json({ message: 'Invalid credentials' });
+      return;
     }
+
+    // Convert the user document to a plain object for the response
+    const userObj = user.toObject();
+
+    res.status(200).json({
+      user: {
+        _id: userObj._id,
+        name: userObj.name,
+        email: userObj.email,
+        role: userObj.role,
+      },
+      token: generateToken(userObj._id.toString()),
+    });
   } catch (error) {
-    console.error(error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({ message: 'Server Error', error: errorMessage });
+    console.error('Error in loginUser:', error);
+    res.status(500).json({ message: 'Server error', error });
   }
 };
 
-export { registerUser, loginUser, getUserProfile }; 
+/**
+ * @desc    Get user profile
+ * @route   GET /api/auth/profile
+ * @access  Private
+ */
+export const getUserProfile = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const user = await User.findById(req.user?._id).select('-password');
+    
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+    
+    res.status(200).json(user);
+  } catch (error) {
+    console.error('Error in getUserProfile:', error);
+    res.status(500).json({ message: 'Server error', error });
+  }
+};
+
+/**
+ * @desc    Get all users (for admin functions like assigning to projects)
+ * @route   GET /api/auth/users
+ * @access  Private/Admin
+ */
+export const getUsers = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const users = await User.find({}).select('-password');
+    res.status(200).json(users);
+  } catch (error) {
+    console.error('Error in getUsers:', error);
+    res.status(500).json({ message: 'Server error', error });
+  }
+}; 
