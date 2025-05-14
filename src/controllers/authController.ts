@@ -169,4 +169,58 @@ export const getCurrentUser = async (req: Request, res: Response): Promise<void>
     console.error('Error getting current user:', error);
     res.status(500).json({ message: 'Server error' });
   }
+};
+
+/**
+ * @desc    Update user profile
+ * @route   PUT /api/auth/profile
+ * @access  Private
+ */
+export const updateUserProfile = async (req: Request, res: Response): Promise<void> => {
+  try {
+    // Find the user
+    const user = await User.findById(req.user?._id);
+    
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+    
+    // Update user data with request body or keep existing values
+    user.name = req.body.name || user.name;
+    user.email = req.body.email || user.email;
+    user.title = req.body.title || user.title;
+    user.department = req.body.department || user.department;
+    user.avatar = req.body.avatar || user.avatar;
+    
+    // Update skills if provided
+    if (req.body.skills && Array.isArray(req.body.skills)) {
+      user.skills = req.body.skills;
+    }
+    
+    // Update password if provided
+    if (req.body.password) {
+      const salt = await bcrypt.genSalt(10);
+      user.password = await bcrypt.hash(req.body.password, salt);
+    }
+    
+    // Save updated user
+    const updatedUser = await user.save();
+    
+    // Return updated user info without password
+    const userObj = updatedUser.toObject();
+    const userResponse = { ...userObj };
+    delete (userResponse as any).password;
+    
+    res.status(200).json({
+      success: true,
+      user: userResponse
+    });
+  } catch (error) {
+    console.error('Error updating user profile:', error);
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error instanceof Error ? error.message : String(error) 
+    });
+  }
 }; 

@@ -5,7 +5,7 @@ export interface IProject extends Document {
   description: string;
   clientId: mongoose.Types.ObjectId;               // Reference to Client model
   clientName: string;                              // Client's name for quick access
-  status: 'Active' | 'Paused' | 'Completed';
+  status: 'Active' | 'Paused' | 'Completed' | 'Delivered';
   priority?: 'High' | 'Medium' | 'Low';
   startDate: Date;
   deadline: Date;
@@ -56,7 +56,7 @@ const ProjectSchema: Schema = new Schema(
     },
     status: {
       type: String,
-      enum: ['Active', 'Paused', 'Completed'],
+      enum: ['Active', 'Paused', 'Completed', 'Delivered'],
       default: 'Active',
     },
     priority: {
