@@ -19,6 +19,14 @@ export interface IUser extends Document {
   skills: ISkill[];
   joinedAt: Date;
   isActive: boolean;
+  effectiveness?: {
+    progressScore: number;      // 0–100
+    disciplineScore: number;    // 0–100
+    communicationScore?: number; // optional, 0–100
+    overall: number;            // Weighted average
+    notes?: string;             // Optional performance remarks
+    lastEvaluated?: Date;       // Timestamp of last evaluation
+  };
   createdAt: Date;
   updatedAt: Date;
   matchPassword(enteredPassword: string): Promise<boolean>;
@@ -79,6 +87,30 @@ const userSchema = new Schema<IUser>(
     isActive: {
       type: Boolean,
       default: true,
+    },
+    effectiveness: {
+      progressScore: {
+        type: Number,
+        min: 0,
+        max: 100,
+      },
+      disciplineScore: {
+        type: Number,
+        min: 0,
+        max: 100,
+      },
+      communicationScore: {
+        type: Number,
+        min: 0,
+        max: 100,
+      },
+      overall: {
+        type: Number,
+        min: 0,
+        max: 100,
+      },
+      notes: String,
+      lastEvaluated: Date,
     },
   },
   {

@@ -140,4 +140,33 @@ export const getUsers = async (req: Request, res: Response): Promise<void> => {
     console.error('Error in getUsers:', error);
     res.status(500).json({ message: 'Server error', error });
   }
+};
+
+// @desc    Get current user details
+// @route   GET /api/auth/me
+// @access  Private
+export const getCurrentUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    // req.user is set by the protect middleware
+    if (!req.user) {
+      res.status(401).json({ message: 'Not authorized' });
+      return;
+    }
+    
+    // Get fresh user data from the database
+    const user = await User.findById(req.user._id).select('-password');
+    
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+    
+    res.status(200).json({
+      success: true,
+      user
+    });
+  } catch (error) {
+    console.error('Error getting current user:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
 }; 
