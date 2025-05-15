@@ -223,4 +223,191 @@ export const updateUserProfile = async (req: Request, res: Response): Promise<vo
       error: error instanceof Error ? error.message : String(error) 
     });
   }
+};
+
+/**
+ * @desc    Create a new user (Admin only)
+ * @route   POST /api/auth/users
+ * @access  Private/Admin
+ */
+export const createUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { name, email, password, role, title, department } = req.body;
+
+    // Validate input
+    if (!name || !email || !password) {
+      res.status(400).json({ message: 'Please provide all required fields' });
+      return;
+    }
+
+    // Check if user already exists
+    const userExists = await User.findOne({ email });
+    if (userExists) {
+      res.status(400).json({ message: 'User already exists' });
+      return;
+    }
+
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Create user with hashed password
+    const user = await User.create({
+      name,
+      email,
+      password: hashedPassword,
+      role: role || 'developer',
+      title: title || '',
+      department: department || '',
+    });
+
+    if (user) {
+      // Convert the user document to a plain object for the response
+      const userObj = user.toObject();
+      
+      // Remove the password from the user object
+      const userResponse = { ...userObj };
+      delete (userResponse as any).password;
+      
+      res.status(201).json({
+        user: userResponse,
+        message: 'User created successfully',
+      });
+    } else {
+      res.status(400).json({ message: 'Invalid user data' });
+    }
+  } catch (error) {
+    console.error('Error in createUser:', error);
+    res.status(500).json({ message: 'Server error', error });
+  }
+};
+
+/**
+ * @desc    Get user by ID
+ * @route   GET /api/auth/users/:id
+ * @access  Private/Admin
+ */
+export const getUserById = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const user = await User.findById(req.params.id).select('-password');
+    
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+    
+    res.status(200).json(user);
+  } catch (error) {
+    console.error('Error in getUserById:', error);
+    res.status(500).json({ message: 'Server error', error });
+  }
+};
+
+/**
+ * @desc    Update user (Admin only)
+ * @route   PUT /api/auth/users/:id
+ * @access  Private/Admin
+ */
+export const updateUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const user = await User.findById(req.params.id);
+    
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+    
+    // Update user data with request body or keep existing values
+    user.name = req.body.name || user.name;
+    user.email = req.body.email || user.email;
+    user.role = req.body.role || user.role;
+    user.title = req.body.title || user.title;
+    user.department = req.body.department || user.department;
+    user.isActive = req.body.isActive !== undefined ? req.body.isActive : user.isActive;
+    
+    // Update skills if provided
+    if (req.body.skills && Array.isArray(req.body.skills)) {
+      user.skills = req.body.skills;
+    }
+    
+    // Update password if provided
+    if (req.body.password) {
+      const salt = await bcrypt.genSalt(10);
+      user.password = await bcrypt.hash(req.body.password, salt);
+    }
+    
+    // Save updated user
+    const updatedUser = await user.save();
+    
+    // Return updated user info without password
+    const userObj = updatedUser.toObject();
+    const userResponse = { ...userObj };
+    delete (userResponse as any).password;
+    
+    res.status(200).json({
+      success: true,
+      user: userResponse,
+      message: 'User updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating user:', error);
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error instanceof Error ? error.message : String(error) 
+    });
+  }
+};
+
+/**
+ * @desc    Delete user
+ * @route   DELETE /api/auth/users/:id
+ * @access  Private/Admin
+ */
+export const deleteUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const user = await User.findById(req.params.id);
+    
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+    
+    await user.deleteOne();
+    
+    res.status(200).json({ 
+      success: true, 
+      message: 'User deleted successfully' 
+    });
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error instanceof Error ? error.message : String(error) 
+    });
+  }
+};
+
+/**
+ * @desc    Get users filtered by role
+ * @route   GET /api/auth/users/role/:role
+ * @access  Private/Admin
+ */
+export const getUsersByRole = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { role } = req.params;
+    
+    // Validate role
+    const validRoles = ['admin', 'developer', 'teamLead', 'client'];
+    if (!validRoles.includes(role)) {
+      res.status(400).json({ message: 'Invalid role specified' });
+      return;
+    }
+    
+    const users = await User.find({ role }).select('-password');
+    
+    res.status(200).json(users);
+  } catch (error) {
+    console.error('Error getting users by role:', error);
+    res.status(500).json({ message: 'Server error', error });
+  }
 }; 
