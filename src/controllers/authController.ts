@@ -20,7 +20,7 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
   try {
     const { name, email, password, role } = req.body;
 
-    // Validate required fields
+    // Validate input
     if (!name || !email || !password) {
       res.status(400).json({ message: 'Please provide all required fields' });
       return;
@@ -37,11 +37,11 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Create user
+    // Create user with hashed password
     const user = await User.create({
       name,
       email,
-      password: hashedPassword,
+      password: hashedPassword, // Use pre-hashed password to avoid double hashing in middleware
       role: role || 'developer', // Default role
     });
 
@@ -49,11 +49,12 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
       // Convert the user document to a plain object for the response
       const userObj = user.toObject();
       
+      // Remove the password from the user object
+      const userResponse = { ...userObj };
+      delete (userResponse as any).password;
+      
       res.status(201).json({
-        _id: userObj._id,
-        name: userObj.name,
-        email: userObj.email,
-        role: userObj.role,
+        user: userResponse,
         token: generateToken(userObj._id.toString()),
       });
     } else {
@@ -81,7 +82,7 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Compare passwords
+    // Compare passwords using bcrypt directly
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       res.status(401).json({ message: 'Invalid credentials' });
@@ -90,14 +91,13 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
 
     // Convert the user document to a plain object for the response
     const userObj = user.toObject();
+    
+    // Remove the password from the user object
+    const userResponse = { ...userObj };
+    delete (userResponse as any).password;
 
     res.status(200).json({
-      user: {
-        _id: userObj._id,
-        name: userObj.name,
-        email: userObj.email,
-        role: userObj.role,
-      },
+      user: userResponse,
       token: generateToken(userObj._id.toString()),
     });
   } catch (error) {

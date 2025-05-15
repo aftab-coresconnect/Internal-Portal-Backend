@@ -10,8 +10,8 @@ router.post('/login', loginUser);
 
 // Protected routes
 router.get('/profile', protect, getUserProfile);
-router.put('/profile', protect, updateUserProfile);
 router.get('/me', protect, getCurrentUser);
+router.put('/profile', protect, updateUserProfile);
 
 // Admin routes
 router.get('/users', protect, admin, getUsers);

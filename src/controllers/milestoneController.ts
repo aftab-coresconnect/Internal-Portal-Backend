@@ -188,4 +188,30 @@ export const deleteMilestone = async (req: Request, res: Response): Promise<void
       error: error.message || String(error) 
     });
   }
+};
+
+// Get milestones assigned to a specific user
+export const getUserMilestones = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.params.userId || req.user?._id;
+    
+    if (!userId) {
+      res.status(400).json({ message: 'User ID is required' });
+      return;
+    }
+    
+    // Find all milestones where the user is assigned
+    const milestones = await Milestone.find({ assignedTo: userId })
+      .populate('project', 'title status')
+      .populate('assignedTo', 'name email role')
+      .sort({ dueDate: 1 }); // Sort by nearest due date first
+    
+    res.status(200).json(milestones);
+  } catch (error) {
+    console.error('Error fetching user milestones:', error);
+    res.status(500).json({ 
+      message: 'Error fetching user milestones', 
+      error: error instanceof Error ? error.message : String(error) 
+    });
+  }
 }; 

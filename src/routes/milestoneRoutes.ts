@@ -4,7 +4,8 @@ import {
   getMilestoneById,
   createMilestone,
   updateMilestone,
-  deleteMilestone
+  deleteMilestone,
+  getUserMilestones
 } from '../controllers/milestoneController';
 import { protect, admin } from '../middleware/authMiddleware';
 
@@ -13,16 +14,19 @@ const router = express.Router();
 // Get all milestones for a project
 router.get('/project/:projectId', protect, getProjectMilestones);
 
-// Get milestone by ID
-router.get('/:id', protect, getMilestoneById);
+// Get milestones for current user
+router.get('/user', protect, getUserMilestones);
+
+// Get milestones for specific user (admin only)
+router.get('/user/:userId', protect, admin, getUserMilestones);
 
 // Create new milestone
 router.post('/', protect, createMilestone);
 
-// Update milestone
-router.put('/:id', protect, updateMilestone);
-
-// Delete milestone
-router.delete('/:id', protect, deleteMilestone);
+// Milestone by ID routes
+router.route('/:id')
+  .get(protect, getMilestoneById)
+  .put(protect, updateMilestone)
+  .delete(protect, admin, deleteMilestone);
 
 export default router; 
