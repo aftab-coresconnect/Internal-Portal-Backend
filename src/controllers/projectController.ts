@@ -359,4 +359,36 @@ export const deleteProject = async (req: Request, res: Response): Promise<void> 
       error: error instanceof Error ? error.message : String(error) 
     });
   }
+};
+
+// Get projects by user ID (for a specific user's dashboard)
+export const getUserProjects = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.params.userId || req.user?._id;
+    
+    if (!userId) {
+      res.status(400).json({ message: 'User ID is required' });
+      return;
+    }
+    
+    // Find all projects where the user is assigned as a developer or project manager
+    const projects = await Project.find({
+      $or: [
+        { assignedDevelopers: userId },
+        { projectManager: userId }
+      ]
+    })
+    .populate('assignedDevelopers', 'name email role')
+    .populate('clientId', 'name companyName')
+    .populate('projectManager', 'name email')
+    .sort({ deadline: 1 }); // Sort by nearest deadline first
+    
+    res.status(200).json(projects);
+  } catch (error) {
+    console.error('Error fetching user projects:', error);
+    res.status(500).json({ 
+      message: 'Error fetching user projects', 
+      error: error instanceof Error ? error.message : String(error) 
+    });
+  }
 }; 

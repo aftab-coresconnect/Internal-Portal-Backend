@@ -122,11 +122,17 @@ const userSchema = new Schema<IUser>(
 userSchema.pre('save', async function (next) {
   const user = this as IUser;
   
+  // Only hash the password if it's modified or new
   if (!user.isModified('password')) {
     return next();
   }
 
   try {
+    // Check if the password is already hashed (usually bcrypt hashes start with $2a$, $2b$ or $2y$)
+    if (user.password.match(/^\$2[ayb]\$\d+\$/)) {
+      return next(); // Skip hashing if already appears to be hashed
+    }
+
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(user.password, salt);
     next();
