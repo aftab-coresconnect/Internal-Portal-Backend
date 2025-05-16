@@ -3,14 +3,30 @@ import mongoose from 'mongoose';
 import Project, { IProject } from '../models/Project';
 import Milestone from '../models/Milestone';
 import Client from '../models/Client';
+import Developer from '../models/Developer';
 
 // Get all projects
 export const getAllProjects = async (req: Request, res: Response): Promise<void> => {
   try {
-    const projects = await Project.find().populate('assignedDevelopers', 'name email role');
+    console.log('[getAllProjects] Fetching all projects');
+    
+    const projects = await Project.find()
+      .populate('assignedDevelopers', 'name email role')
+      .populate('projectManager', 'name email role')
+      .populate('clientId', 'name companyName')
+      .populate('milestones')
+      .sort({ createdAt: -1 }); // Sort by newest first
+      
+    console.log(`[getAllProjects] Found ${projects.length} projects`);
     res.status(200).json(projects);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching projects', error });
+    console.error('[getAllProjects] Error:', error instanceof Error ? error.message : String(error));
+    console.error('[getAllProjects] Stack trace:', error instanceof Error ? error.stack : 'No stack trace');
+    
+    res.status(500).json({ 
+      message: 'Error fetching projects', 
+      error: error instanceof Error ? error.message : String(error) 
+    });
   }
 };
 
@@ -158,6 +174,22 @@ export const createProject = async (req: Request, res: Response): Promise<void> 
       console.log('[createProject] Project linked to client');
     }
     
+    // Sync currentProjects for assigned developers
+    if (Array.isArray(assignedDevelopers)) {
+      await Promise.all(assignedDevelopers.map(async (devId: string) => {
+        await Developer.findByIdAndUpdate(
+          devId,
+          { $addToSet: { currentProjects: { project: savedProject._id, role: 'contributor' } } }
+        );
+      }));
+    }
+    if (projectManager) {
+      await Developer.findByIdAndUpdate(
+        projectManager,
+        { $addToSet: { currentProjects: { project: savedProject._id, role: 'projectManager' } } }
+      );
+    }
+    
     // Return the project with populated fields
     console.log('[createProject] Fetching populated project');
     const populatedProject = await Project.findById(savedProject._id)
@@ -253,6 +285,43 @@ export const updateProject = async (req: Request, res: Response): Promise<void> 
       }
     }
     
+    // Sync currentProjects for developers
+    if (existingProject) {
+      const prevDevs = existingProject.assignedDevelopers.map((id: any) => id.toString());
+      const newDevs = (updateData.assignedDevelopers || prevDevs).map((id: any) => id.toString());
+      const removedDevs = prevDevs.filter((id: string) => !newDevs.includes(id));
+      const addedDevs = newDevs.filter((id: string) => !prevDevs.includes(id));
+      // Remove project from removed developers
+      await Promise.all(removedDevs.map(async (devId: string) => {
+        await Developer.findByIdAndUpdate(
+          devId,
+          { $pull: { currentProjects: { project: existingProject._id } } }
+        );
+      }));
+      // Add project to added developers
+      await Promise.all(addedDevs.map(async (devId: string) => {
+        await Developer.findByIdAndUpdate(
+          devId,
+          { $addToSet: { currentProjects: { project: existingProject._id, role: 'contributor' } } }
+        );
+      }));
+      // Sync projectManager
+      if (updateData.projectManager && updateData.projectManager !== (existingProject.projectManager?.toString() || '')) {
+        // Remove from old PM
+        if (existingProject.projectManager) {
+          await Developer.findByIdAndUpdate(
+            existingProject.projectManager,
+            { $pull: { currentProjects: { project: existingProject._id } } }
+          );
+        }
+        // Add to new PM
+        await Developer.findByIdAndUpdate(
+          updateData.projectManager,
+          { $addToSet: { currentProjects: { project: existingProject._id, role: 'projectManager' } } }
+        );
+      }
+    }
+    
     // Update the project
     console.log('[updateProject] Updating project with data');
     
@@ -329,6 +398,12 @@ export const deleteProject = async (req: Request, res: Response): Promise<void> 
         
       console.log(`[deleteProject] Deleted ${deleteResult.deletedCount} milestones for project ${id}`);
     }
+    
+    // Remove project from all developers' currentProjects
+    await Developer.updateMany(
+      { 'currentProjects.project': project._id },
+      { $pull: { currentProjects: { project: project._id } } }
+    );
     
     // Delete the project
     console.log('[deleteProject] Deleting project');

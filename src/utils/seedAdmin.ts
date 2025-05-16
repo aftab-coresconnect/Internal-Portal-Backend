@@ -1,6 +1,8 @@
+import bcrypt from 'bcryptjs';
+import Admin from '../models/Admin';
 import mongoose from 'mongoose';
-import User from '../models/User';
 import connectDB from '../config/db';
+
 
 const seedAdmin = async () => {
   try {
@@ -9,17 +11,28 @@ const seedAdmin = async () => {
     console.log('Connected to database.');
 
     // Check if admin already exists
-    const adminExists = await User.findOne({ email: 'aftab@coresconnect.com' });
+    const adminExists = await Admin.findOne({ email: 'aftab@coresconnect.com' });
     
     if (adminExists) {
-      console.log('Admin user already exists.');
+      console.log('Admin user already exists. Updating password...');
+      
+      // Hash password
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash('12345678', salt);
+      
+      adminExists.password = hashedPassword;
+      await adminExists.save();
+      
+      console.log('Admin password updated successfully.');
     } else {
       // Create admin user
-      const admin = await User.create({
-        firstName: 'Aftab',
-        lastName: 'Admin',
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash('12345678', salt);
+      
+      const admin = await Admin.create({
+        name: 'Aftab Admin',
         email: 'aftab@coresconnect.com',
-        password: '123456',
+        password: hashedPassword,
         role: 'admin',
         title: 'System Administrator',
         department: 'IT',

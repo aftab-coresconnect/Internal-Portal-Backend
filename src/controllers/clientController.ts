@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import Client, { IClient } from '../models/Client';
+import Developer from '../models/Developer';
+import bcrypt from 'bcryptjs';
 
 // Get all clients
 export const getAllClients = async (req: Request, res: Response): Promise<void> => {
@@ -35,6 +37,7 @@ export const createClient = async (req: Request, res: Response): Promise<void> =
     const {
       name,
       email,
+      password,
       phone,
       companyName,
       website,
@@ -43,13 +46,21 @@ export const createClient = async (req: Request, res: Response): Promise<void> =
       painPoints = []
     } = req.body;
 
-    // Check if email already exists
+    // Check if email already exists in Client model
     const emailExists = await Client.findOne({ email });
     if (emailExists) {
       res.status(400).json({ message: 'Email already in use' });
       return;
     }
 
+    // Check if email already exists in User model
+    const userExists = await Developer.findOne({ email });
+    if (userExists) {
+      res.status(400).json({ message: 'Email already in use by a user' });
+      return;
+    }
+
+    // Create client record
     const newClient = new Client({
       name,
       email,
@@ -60,6 +71,21 @@ export const createClient = async (req: Request, res: Response): Promise<void> =
       notes,
       painPoints
     });
+
+    // Create a corresponding user with 'client' role if password is provided
+    if (password) {
+      // Hash password
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(password, salt);
+
+      await Developer.create({
+        name,
+        email,
+        password: hashedPassword,
+        role: 'client',
+        title: companyName // Store company name in the title field
+      });
+    }
 
     const savedClient = await newClient.save();
     res.status(201).json(savedClient);
@@ -74,9 +100,16 @@ export const createClient = async (req: Request, res: Response): Promise<void> =
 // Update client
 export const updateClient = async (req: Request, res: Response): Promise<void> => {
   try {
+    const client = await Client.findById(req.params.id);
+    if (!client) {
+      res.status(404).json({ message: 'Client not found' });
+      return;
+    }
+
     const {
       name,
       email,
+      password,
       phone,
       companyName,
       website,
@@ -85,35 +118,70 @@ export const updateClient = async (req: Request, res: Response): Promise<void> =
       painPoints
     } = req.body;
 
-    // Check if new email already exists for different client
-    if (email) {
-      const emailExists = await Client.findOne({ email, _id: { $ne: req.params.id } });
+    // If email is changed, check if it's already in use
+    if (email && email !== client.email) {
+      const emailExists = await Client.findOne({ email });
       if (emailExists) {
-        res.status(400).json({ message: 'Email already in use by another client' });
+        res.status(400).json({ message: 'Email already in use' });
+        return;
+      }
+
+      const userExists = await Developer.findOne({ email });
+      if (userExists) {
+        res.status(400).json({ message: 'Email already in use by a user' });
         return;
       }
     }
 
-    const updatedClient = await Client.findByIdAndUpdate(
-      req.params.id,
-      {
-        name,
-        email,
-        phone,
-        companyName,
-        website,
-        address,
-        notes,
-        painPoints
-      },
-      { new: true }
-    );
+    // Update client
+    client.name = name || client.name;
+    client.email = email || client.email;
+    client.phone = phone || client.phone;
+    client.companyName = companyName || client.companyName;
+    client.website = website || client.website;
+    
+    if (address) {
+      client.address = {
+        ...client.address,
+        ...address
+      };
+    }
+    
+    if (notes) client.notes = notes;
+    if (painPoints) client.painPoints = painPoints;
 
-    if (!updatedClient) {
-      res.status(404).json({ message: 'Client not found' });
-      return;
+    // Update the corresponding user if it exists
+    if (name || email || password || companyName) {
+      const user = await Developer.findOne({ email: client.email, role: 'client' });
+      
+      if (user) {
+        if (name) user.name = name;
+        if (email) user.email = email;
+        if (companyName) user.title = companyName;
+        
+        if (password) {
+          const salt = await bcrypt.genSalt(10);
+          user.password = await bcrypt.hash(password, salt);
+        }
+        
+        await user.save();
+      } 
+      // If user doesn't exist but we have password, create it
+      else if (password) {
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+        
+        await Developer.create({
+          name: name || client.name,
+          email: email || client.email,
+          password: hashedPassword,
+          role: 'client',
+          title: companyName || client.companyName
+        });
+      }
     }
 
+    const updatedClient = await client.save();
     res.status(200).json(updatedClient);
   } catch (error) {
     res.status(500).json({ message: 'Error updating client', error });
@@ -123,14 +191,20 @@ export const updateClient = async (req: Request, res: Response): Promise<void> =
 // Delete client
 export const deleteClient = async (req: Request, res: Response): Promise<void> => {
   try {
-    const client = await Client.findByIdAndDelete(req.params.id);
+    const client = await Client.findById(req.params.id);
     
     if (!client) {
       res.status(404).json({ message: 'Client not found' });
       return;
     }
     
-    res.status(200).json({ message: 'Client deleted successfully' });
+    // Delete corresponding user if it exists
+    await Developer.deleteOne({ email: client.email, role: 'client' });
+    
+    // Delete client
+    await client.deleteOne();
+    
+    res.status(200).json({ message: 'Client deleted' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting client', error });
   }

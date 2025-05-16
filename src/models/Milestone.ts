@@ -57,7 +57,7 @@ const MilestoneSchema: Schema = new Schema(
     },
     assignedTo: [{
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: 'Developer',
     }],
     dependencies: [{
       type: mongoose.Schema.Types.ObjectId,
