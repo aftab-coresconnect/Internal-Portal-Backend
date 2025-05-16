@@ -91,11 +91,11 @@ const ProjectSchema: Schema = new Schema(
     }],
     assignedDevelopers: [{
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: 'Developer',
     }],
     projectManager: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: 'Developer',
     },
     milestones: [{
       type: mongoose.Schema.Types.ObjectId,

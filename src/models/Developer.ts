@@ -7,18 +7,34 @@ interface ISkill {
   level: number;
 }
 
-// User interface
-export interface IUser extends Document {
+// Project reference interface for user's current projects
+interface IProjectReference {
+  project: mongoose.Types.ObjectId;
+  role: string;
+}
+
+// Developer interface (previously User)
+export interface IDeveloper extends Document {
   name: string;
   email: string;
   password: string;
-  role: 'admin' | 'developer' | 'teamLead' | 'client';
+  role: 'developer';
   avatar: string;
   title: string;
   department: string;
   skills: ISkill[];
   joinedAt: Date;
   isActive: boolean;
+  lastActive?: Date;
+  lastLogin?: Date;
+  designation?: string;
+  currentProjects?: IProjectReference[];
+  // Developer specific fields
+  techStack?: string[];
+  githubProfile?: string;
+  bugsResolved?: number;
+  codeQualityScore?: number;
+  pullRequestsCompleted?: number;
   effectiveness?: {
     progressScore: number;      // 0–100
     disciplineScore: number;    // 0–100
@@ -33,7 +49,7 @@ export interface IUser extends Document {
 }
 
 // Create schema
-const userSchema = new Schema<IUser>(
+const developerSchema = new Schema<IDeveloper>(
   {
     name: {
       type: String,
@@ -55,7 +71,7 @@ const userSchema = new Schema<IUser>(
     },
     role: {
       type: String,
-      enum: ['admin', 'developer', 'teamLead', 'client'],
+      enum: ['admin', 'developer', 'designer', 'projectManager', 'teamLead', 'client'],
       default: 'developer',
     },
     avatar: {
@@ -88,6 +104,47 @@ const userSchema = new Schema<IUser>(
       type: Boolean,
       default: true,
     },
+    lastActive: {
+      type: Date,
+      default: Date.now,
+    },
+    lastLogin: {
+      type: Date,
+      default: Date.now,
+    },
+    designation: {
+      type: String,
+      default: '',
+    },
+    currentProjects: [
+      {
+        project: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'Project',
+        },
+        role: {
+          type: String,
+          default: 'contributor',
+        },
+      },
+    ],
+    // Developer specific fields
+    techStack: [String],
+    githubProfile: String,
+    bugsResolved: {
+      type: Number,
+      default: 0,
+    },
+    codeQualityScore: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: 0,
+    },
+    pullRequestsCompleted: {
+      type: Number,
+      default: 0,
+    },
     effectiveness: {
       progressScore: {
         type: Number,
@@ -119,22 +176,22 @@ const userSchema = new Schema<IUser>(
 );
 
 // Hash password before saving
-userSchema.pre('save', async function (next) {
-  const user = this as IUser;
+developerSchema.pre('save', async function (next) {
+  const developer = this as IDeveloper;
   
   // Only hash the password if it's modified or new
-  if (!user.isModified('password')) {
+  if (!developer.isModified('password')) {
     return next();
   }
 
   try {
     // Check if the password is already hashed (usually bcrypt hashes start with $2a$, $2b$ or $2y$)
-    if (user.password.match(/^\$2[ayb]\$\d+\$/)) {
+    if (developer.password.match(/^\$2[ayb]\$\d+\$/)) {
       return next(); // Skip hashing if already appears to be hashed
     }
 
     const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(user.password, salt);
+    developer.password = await bcrypt.hash(developer.password, salt);
     next();
   } catch (error) {
     next(error instanceof Error ? error : new Error(String(error)));
@@ -142,10 +199,10 @@ userSchema.pre('save', async function (next) {
 });
 
 // Method to compare password
-userSchema.methods.matchPassword = async function (enteredPassword: string): Promise<boolean> {
+developerSchema.methods.matchPassword = async function (enteredPassword: string): Promise<boolean> {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
-const User: Model<IUser> = mongoose.model<IUser>('User', userSchema);
+const Developer: Model<IDeveloper> = mongoose.model<IDeveloper>('Developer', developerSchema);
 
-export default User; 
+export default Developer; 

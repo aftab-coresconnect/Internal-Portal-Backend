@@ -1,13 +1,18 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import User, { IUser } from '../models/User';
+import Developer, { IDeveloper } from '../models/Developer';
+import ProjectManager from '../models/ProjectManager';
+import Designer from '../models/Designer';
+import Client from '../models/Client';
+import Admin from '../models/Admin';
 import { TokenData } from '../types/jwt';
+import { GenericUser } from '../types/user';
 
 // Extend the Express Request interface to include user property
 declare global {
   namespace Express {
     interface Request {
-      user?: IUser;
+      user?: GenericUser;
     }
   }
 }
@@ -38,8 +43,31 @@ const protect = async (req: Request, res: Response, next: NextFunction): Promise
       const secret = process.env.JWT_SECRET || 'fallback_jwt_secret_not_for_production';
       const decoded = jwt.verify(token, secret) as TokenData;
 
-      // Set req.user to the authenticated user
-      const user = await User.findById(decoded.id).select('-password');
+      // Try to find the user in any of the models
+      let user = null;
+      
+      // Check Admin model first
+      user = await Admin.findById(decoded.id).select('-password');
+      
+      // If not found, check Developer model
+      if (!user) {
+        user = await Developer.findById(decoded.id).select('-password');
+      }
+      
+      // If not found, check ProjectManager model
+      if (!user) {
+        user = await ProjectManager.findById(decoded.id).select('-password');
+      }
+      
+      // If not found, check Designer model
+      if (!user) {
+        user = await Designer.findById(decoded.id).select('-password');
+      }
+      
+      // If not found, check Client model
+      if (!user) {
+        user = await Client.findById(decoded.id).select('-password');
+      }
       
       if (!user) {
         res.status(401).json({ message: 'User not found' });
@@ -47,7 +75,7 @@ const protect = async (req: Request, res: Response, next: NextFunction): Promise
       }
 
       // Assigning user to req.user with type assertion
-      req.user = user as IUser;
+      req.user = user as GenericUser;
 
       next();
       return;
